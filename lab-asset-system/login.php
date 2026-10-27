@@ -1,0 +1,14 @@
+<?php
+require_once 'auth.php'; require_once 'auth_ui.php';
+if (!empty($_SESSION['auth_user'])) { header('Location: index.php'); exit; }
+$error=''; $email=''; $next=$_GET['next']??$_POST['next']??'index.php'; if (!preg_match('/^[a-zA-Z0-9_-]+\.php$/',$next) || in_array($next,['login.php','register.php','forgot_password.php','reset_password.php','logout.php'])) $next='index.php';
+if ($_SERVER['REQUEST_METHOD']==='POST') {
+  $email=strtolower(trim($_POST['email']??'')); $password=$_POST['password']??'';
+  if (!filter_var($email,FILTER_VALIDATE_EMAIL) || $password==='') $error='Enter a valid email address and password.';
+  else { try { $stmt=auth_db()->prepare('SELECT id,full_name,email,password_hash,role,is_active FROM auth_users WHERE email=? LIMIT 1'); $stmt->execute([$email]); $u=$stmt->fetch();
+    if ($u && (int)$u['is_active']===1 && password_verify($password,$u['password_hash'])) { session_regenerate_id(true); $_SESSION['auth_user']=['id'=>$u['id'],'name'=>$u['full_name'],'email'=>$u['email'],'role'=>$u['role']]; header('Location: '.$next); exit; }
+    $error='The email or password is incorrect, or the account is inactive.';
+  } catch(Throwable $e) { $error='Authentication is not configured yet. Import auth_setup.sql into the lab_asset_system database, then try again.'; } }
+}
+auth_page_start('Welcome back','Sign in to continue to your asset management dashboard.'); flash_message(); if($error) echo '<div class="auth-alert error">'.h($error).'</div>'; ?>
+<form method="post" class="auth-form"><input type="hidden" name="next" value="<?= h($next) ?>"><label for="email">Work email</label><input id="email" name="email" type="email" autocomplete="username" placeholder="you@organization.edu" required value="<?= h($email) ?>"><div class="label-row"><label for="password">Password</label><a href="forgot_password.php">Forgot password?</a></div><div class="password-wrap"><input id="password" name="password" type="password" autocomplete="current-password" placeholder="Enter your password" required><button type="button" class="show-password" data-toggle="password">Show</button></div><button class="auth-submit" type="submit">Sign in <span>→</span></button></form><div class="auth-divider"><span>NEW TO LABASSET?</span></div><a class="auth-secondary" href="register.php">Create an account</a><p class="auth-note">Access is limited to authorized laboratory and management personnel.</p><script>document.querySelectorAll('[data-toggle]').forEach(b=>b.addEventListener('click',()=>{const i=document.getElementById(b.dataset.toggle);i.type=i.type==='password'?'text':'password';b.textContent=i.type==='password'?'Show':'Hide'}));</script><?php auth_page_end(); ?>
